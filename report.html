@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+
+<meta name="author" content="Chen Jiajun" />
+
+
+<title>Practical Machine Learning Project Report</title>
+
+<style>
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs && document.readyState && document.readyState === "complete") {
+   window.setTimeout(function() {
+      hljs.initHighlighting();
+   }, 0);
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+</head>
+
+<body>
+
+<style type="text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+</style>
+
+
+
+<div class="container-fluid main-container">
+
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">Practical Machine Learning Project Report</h1>
+<h4 class="author"><em>Chen Jiajun</em></h4>
+
+</div>
+
+
+<div id="introduction" class="section level2">
+<h2>Introduction</h2>
+<p>Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.</p>
+<p>In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which they did the exercise.</p>
+</div>
+<div id="data-preprocessing" class="section level2">
+<h2>Data Preprocessing</h2> 
+<pre class="r"><code>library(caret)</code></pre>
+<pre><code>## Loading required package: lattice</code></pre>
+<pre><code>## Loading required package: ggplot2</code></pre>
+<pre class="r"><code>library(rpart)
+library(rpart.plot)
+library(randomForest)</code></pre>
+<pre><code>## randomForest 4.6-12</code></pre>
+<pre><code>## Type rfNews() to see new features/changes/bug fixes.</code></pre>
+<pre><code>## 
+## Attaching package: 'randomForest'</code></pre>
+<pre><code>## The following object is masked from 'package:ggplot2':
+## 
+##     margin</code></pre>
+<pre class="r"><code>library(corrplot)</code></pre>
+<p><img src="../coursera-practical-learning-master/report_files/figure-html/1.png" width="600" /></p>
+<div id="reading-the-data" class="section level3">
+<h3>Reading the Data</h3>
+<p>After downloading the data from the data source, we can read the two csv files into two data frames.</p>
+<pre class="r"><code>trainRaw &lt;- read.csv(&quot;./dataset/pml-training.csv&quot;)
+testRaw &lt;- read.csv(&quot;./dataset/pml-testing.csv&quot;)
+dim(trainRaw)</code></pre>
+<pre><code>## [1] 19622   160</code></pre>
+<pre class="r"><code>dim(testRaw)</code></pre>
+<pre><code>## [1]  20 160</code></pre>
+<p>The training data set contains 19622 observations and 160 variables, while the testing data set contains 20 observations and 160 variables. The “classe” variable in the training set is the outcome to predict.</p>
+</div>
+<div id="clean-the-data" class="section level3">
+<p><img src="../coursera-practical-learning-master/report_files/figure-html/2.png" width="600" /></p>
+<h3>Clean the data</h3>
+<p>In this step, we will clean the data and get rid of observations with missing values as well as some meaningless variables.</p>
+<pre class="r"><code>sum(complete.cases(trainRaw))</code></pre>
+<pre><code>## [1] 406</code></pre>
+<ol style="list-style-type: decimal">
+<li>First, we remove columns that contain NA missing values.</li>
+</ol>
+<pre class="r"><code>trainRaw &lt;- trainRaw[, colSums(is.na(trainRaw)) == 0] 
+testRaw &lt;- testRaw[, colSums(is.na(testRaw)) == 0] </code></pre>
+<ol start="2" style="list-style-type: decimal">
+<li>Next, we get rid of some columns that do not contribute much to the accelerometer measurements.</li>
+</ol>
+<pre class="r"><code>classe &lt;- trainRaw$classe
+trainRemove &lt;- grepl(&quot;^X|timestamp|window&quot;, names(trainRaw))
+trainRaw &lt;- trainRaw[, !trainRemove]
+trainCleaned &lt;- trainRaw[, sapply(trainRaw, is.numeric)]
+trainCleaned$classe &lt;- classe
+testRemove &lt;- grepl(&quot;^X|timestamp|window&quot;, names(testRaw))
+testRaw &lt;- testRaw[, !testRemove]
+testCleaned &lt;- testRaw[, sapply(testRaw, is.numeric)]</code></pre>
+<p>Result = The cleaned training data set contains 19622 observations and 53 variables, while the testing data set contains 20 observations and 53 variables. The “classe” variable is still in the cleaned training set.</p>
+</div>
+<div id="slice-the-data" class="section level3">
+<p><img src="../coursera-practical-learning-master/report_files/figure-html/3.png" width="600" /></p>
+<h3>Slice the data</h3>
+<p>Then, we can split the cleaned training set into a pure training data set (60%) and a validation data set (40%). We will use the validation data set to conduct cross validation in future steps.</p>
+<pre class="r"><code>set.seed(22519) # For reproducibile purpose
+inTrain &lt;- createDataPartition(trainCleaned$classe, p=0.60, list=F)
+trainData &lt;- trainCleaned[inTrain, ]
+testData &lt;- trainCleaned[-inTrain, ]</code></pre>
+</div>
+</div>
+<div id="data-modeling" class="section level2">
+<p><img src="../coursera-practical-learning-master/report_files/figure-html/3.png" width="600" /></p>
+<h2>Data Modeling</h2>
+<p>We fit a predictive model for activity recognition using <strong>Random Forest</strong> algorithm because it automatically selects important variables and is robust to correlated covariates &amp; outliers in general. We will use <strong>7-fold cross validation</strong> when applying the algorithm. We will keep the parameter ntree as 250.</p>
+<pre class="r"><code>controlRf &lt;- trainControl(method=&quot;cv&quot;, 7)
+modelRf &lt;- train(classe ~ ., data=trainData, method=&quot;rf&quot;, trControl=controlRf, ntree=250)
+modelRf</code></pre>
+<pre><code>## Random Forest 
+## 
+## 11776 samples
+##    52 predictors
+##     5 classes: 'A', 'B', 'C', 'D', 'E' 
+## 
+## No pre-processing
+## Resampling: Cross-Validated (7 fold) 
+##Summary of sample sizes: 10094, 10093, 10094, 10095, 10093, 10092, ... 
+## Resampling results across tuning parameters:
+## 
+##    mtry  Accuracy   Kappa    
+##     2    0.9887912  0.9858202
+##    27    0.9901494  0.9875388
+##    52    0.9814880  0.9765835
+## 
+## Accuracy was used to select the optimal model using  the largest value.
+## The final value used for the model was mtry = 27.</code></pre>
+<p>Then, we estimate the performance of the model on the validation data set.</p>
+<pre class="r"><code>predictRf &lt;- predict(modelRf, testData)
+confusionMatrix(testData$classe, predictRf)</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 2228    1    3    0    0
+##          B    9 1504    7    0    0
+##          C    0    9 1357    2    0
+##          D    0    1   21 1259    5
+##          E    0    1    5    4 1433
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9917          
+##                  95% CI : (0.9895, 0.9936)
+##     No Information Rate : 0.2851          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.9895          
+##  Mcnemar's Test P-Value : NA              
+## 
+## Statistics by Class:
+
+##Class: A Class: B Class: C Class: D Class: E
+##Sensitivity            0.9960   0.9921   0.9756   0.9960   0.9965
+##Specificity            0.9993   0.9978   0.9983   0.9959   0.9986
+##Pos Pred Value         0.9982   0.9908   0.9920   0.9790   0.9938
+##Neg Pred Value         0.9984   0.9981   0.9948   0.9992   0.9992
+##Prevalence             0.2851   0.1932   0.1773   0.1611   0.1833
+##Detection Rate         0.2840   0.1917   0.1730   0.1605   0.1826
+##Detection Prevalence   0.2845   0.1935   0.1744   0.1639   0.1838
+##Balanced Accuracy      0.9976   0.9949   0.9869   0.9960   0.9976</code></pre>
+<pre class="r"><code>accuracy &lt;- postResample(predictRf, testData$classe)
+accuracy</code></pre>
+<pre><code>##  Accuracy     Kappa 
+## 0.9917155 0.9895201</code></pre>
+<pre class="r"><code>oose &lt;- 1 - as.numeric(confusionMatrix(testData$classe, predictRf)$overall[1])
+oose</code></pre>
+<pre><code>## [1] 0.008284476</code></pre>
+<p>So, the estimated accuracy of the model is 99.2% and the estimated out-of-sample error is 0.8%.</p>
+</div>
+<p><img src="../coursera-practical-learning-master/report_files/figure-html/4.png" width="600" /></p>
+<div id="predicting-for-test-data-set" class="section level2">
+<h2>Predicting for Test Data Set</h2>
+<p>Now, we apply the model to the original testing data set downloaded from the data source. We remove the <code>problem_id</code> column first.</p>
+<pre class="r"><code>result &lt;- predict(modelRf, testCleaned[, -length(names(testCleaned))])
+result</code></pre>
+<pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E</code></pre>
+</div>
+<p><img src="../coursera-practical-learning-master/report_files/figure-html/5.png" width="600" /></p>
+<div id="appendix-figures" class="section level2">
+<h2>Appendix: Figures</h2>
+<ol style="list-style-type: decimal">
+<li>Correlation Matrix Visualization</li>
+</ol>
+<pre class="r"><code>corrPlot &lt;- cor(trainData[, -length(names(trainData))])
+corrplot(corrPlot, method=&quot;color&quot;)</code></pre>
+<p><img src="../coursera-practical-learning-master/report_files/figure-html/7.png" width="688" />
+<p><img src="../coursera-practical-learning-master/report_files/figure-html/unnamed-chunk-11-1.png" width="988" />2. Decision Tree Visualization</p>
+<pre class="r"><code>treeModel &lt;- rpart(classe ~ ., data=trainData, method=&quot;class&quot;)
+  prp(treeModel)</code></pre>
+  <p><img src="../coursera-practical-learning-master/report_files/figure-html/6.png" width="688" />
+  <p><img src="../coursera-practical-learning-master/report_files/figure-html/unnamed-chunk-12-1.png" width="888" /></p>
+</div>
+
+</div>
+
+<script>
+$(document).ready(function () {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+});
+
+</script>
+
+</body>
+</html>
